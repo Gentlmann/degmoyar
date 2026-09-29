@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>DEGMOYAR — ROAD CHASE</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="480" height="720"></canvas>
+  <div id="hud">
+    <span>SCORE: <b id="score">0000</b></span>
+    <span>HIGH SCORE: <b id="best">0000</b></span>
+    <span>SPEED: <b id="speed">000 km/h</b></span>
+  </div>
+  <div id="flash"></div>
+  <div id="crashText"></div>
+  <div id="touch">
+    <button id="btnL" type="button">◀ LEFT</button>
+    <button id="btnR" type="button">RIGHT ▶</button>
+  </div>
+  <div id="start" class="screen">
+    <div class="brand">DEGMOYAR</div>
+    <div class="sub">ROAD CHASE</div>
+    <p class="tag">Drive fast. Stay on the road. Avoid the traffic.</p>
+    <button id="startBtn" class="btn" type="button">START GAME</button>
+    <p class="hint"><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd> to Drive</p>
+    <p class="hint"><kbd>M</kbd> to mute music</p>
+  </div>
+  <div id="over" class="screen hidden">
+    <div class="brand small">DEGMOYAR</div>
+    <h2 id="reason">CRASH!</h2>
+    <h3>GAME OVER</h3>
+    <p class="res">SCORE: <b id="fs">0000</b></p>
+    <p class="res">HIGH SCORE: <b id="fh">0000</b></p>
+    <button id="again" class="btn" type="button">PLAY AGAIN</button>
+    <p class="hint">Press <kbd>SPACE</kbd> to restart</p>
+  </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>

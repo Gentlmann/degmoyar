@@ -56,3 +56,5 @@ kbd{display:inline-block;padding:.1em .5em;border:.1em solid #888;border-bottom-
 #over h3{font-size:1.9em;font-weight:900;letter-spacing:.15em;margin-bottom:.3em}
 .res{font-size:1.3em;font-weight:800}
 .res b{color:#ffd400;font-variant-numeric:tabular-nums}
+#touch #btnB{flex:.8;color:#ffd400;border-color:rgba(255,212,0,.6)}
+#touch #btnB.down{background:rgba(255,120,0,.6)}

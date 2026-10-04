@@ -1,8 +1,11 @@
 (() => {
 'use strict';
 const W = 480, H = 720, RL = 70, RR = 410, LW = 85, NL = 4, PY = 545, PW = 44, PH = 80;
+const CYC = 100;   // seconds for a full day/night cycle
 const $ = id => document.getElementById(id);
 const cv = $('game'), ctx = cv.getContext('2d'), wrap = $('wrap');
+const lc = document.createElement('canvas'); lc.width = W; lc.height = H;
+const lx = lc.getContext('2d');
 const COLORS = ['#2ecc71','#f1c40f','#3498db','#9b59b6','#e67e22','#1abc9c','#ecf0f1','#ff9ff3'];
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pad = n => String(Math.floor(n)).padStart(4, '0');
@@ -14,13 +17,15 @@ let state = 'menu', t = 0, score = 0, best = 0, roadSpeed = 220, roadOff = 0, sp
 let shake = 0, crashT = 0, reason = '', overTimer = 0;
 let nitro = 100, boosting = false, wasB = false, bm = 1, slip = 0, combo = 0, comboT = 0;
 let fuel = 100, stalled = false, dist = 0, toys = 0, rain = 0, idleT = 0, wasK = false, lowT = 0, braking = false;
+let isNight = false, nightNow = 0;
 let player, enemies = [], parts = [], scenery = [], items = [], pops = [], skids = [], warns = [];
 const keys = { l: false, r: false, b: false, k: false };
 try { best = parseInt(localStorage.getItem('degmoyar_best')) || 0; } catch (e) {}
 
 const baseSpd = () => 300 + Math.min(t * 5, 380);
 const laneV = l => baseSpd() * [0.3, 0.2, 0.55, 0.35][l];   // lanes 0-1 oncoming, 2-3 same direction
-const dark = () => 0.5 * Math.max(0, Math.sin(t / 20 - 1));
+const sunS = () => Math.sin(((t + 12) % CYC) / CYC * 6.2832);               // sun height: 1 noon, -1 midnight
+const nightAmt = () => Math.max(0, Math.min(1, (0.15 - sunS()) / 0.5));     // 0 day ... 1 full night
 
 /* ---------- responsive ---------- */
 function resize() {
@@ -93,7 +98,8 @@ function playMusic() {
 /* ---------- world ---------- */
 function mkScenery(y) {
   const side = Math.random() < 0.5 ? -1 : 1, r = Math.random();
-  return { y, side, type: r < 0.5 ? 0 : (r < 0.8 ? 1 : 2), s: rnd(0.8, 1.2), x: side < 0 ? rnd(10, 38) : rnd(W - 38, W - 10) };
+  return { y, side, type: r < 0.4 ? 0 : (r < 0.62 ? 1 : (r < 0.78 ? 2 : 3)), s: rnd(0.8, 1.2),
+    x: side < 0 ? rnd(10, 38) : rnd(W - 38, W - 10) };
 }
 function initScenery() { scenery = []; for (let i = 0; i < 14; i++) scenery.push(mkScenery(i * 60 - 40)); }
 function moveScenery(dt) {
@@ -105,6 +111,7 @@ function reset() {
   t = 0; score = 0; roadSpeed = 250; spawnT = 0.9; itemT = 3; shake = 0; crashT = 0;
   nitro = 100; boosting = false; wasB = false; bm = 1; slip = 0; combo = 0; comboT = 0;
   fuel = 100; stalled = false; dist = 0; toys = 0; rain = 0; idleT = 0; wasK = false; lowT = 0; braking = false;
+  isNight = false;
   initScenery();
 }
 function addEnemy(lane, kind) {
@@ -206,6 +213,14 @@ function update(dt) {
   const base = baseSpd();
   rain += (((t > 25 && Math.sin(t / 22) > 0.35) ? 1 : 0) - rain) * Math.min(1, dt * 0.5);
 
+  /* day / night change announcement */
+  const nn = nightAmt() > 0.5;
+  if (nn !== isNight) {
+    isNight = nn;
+    pop(W / 2, 200, nn ? 'NIGHT FALLS' : 'SUNRISE');
+    if (nn) tone(500, 250, 0.5, 'triangle', 0.12); else tone(300, 700, 0.5, 'triangle', 0.12);
+  }
+
   boosting = keys.b && nitro > 0 && !stalled;
   nitro = boosting ? Math.max(0, nitro - 32 * dt) : Math.min(100, nitro + 7 * dt);
   if (boosting && !wasB) noise(0.35, 0.2);
@@ -242,7 +257,7 @@ function update(dt) {
   player.rot = player.vx / 2200 + (slip > 0 ? Math.sin(t * 30) * 0.15 : 0);
   slip = Math.max(0, slip - dt);
   roadOff += roadSpeed * dt; dist += roadSpeed * 0.32 * dt / 3600;
-  score += roadSpeed * dt * 0.02 * (boosting ? 2 : 1);
+  score += roadSpeed * dt * 0.02 * (boosting ? 2 : 1) * (isNight ? 1.25 : 1);
   comboT -= dt; if (comboT <= 0) combo = 0;
 
   /* tailgater when parked in the same-direction lanes */
@@ -338,6 +353,11 @@ function rr(x, y, w, h, r) {
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
+function glow(x, y, r, c) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, c); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+}
 function drawRoad() {
   ctx.fillStyle = '#2f8f3f'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#37a049';
@@ -358,8 +378,8 @@ function drawRoad() {
   const c = RL + 2 * LW;
   ctx.fillStyle = '#ffc400'; ctx.fillRect(c - 4, 0, 3, H); ctx.fillRect(c + 1, 0, 3, H);
   ctx.fillStyle = '#fff';
-  for (const lx of [RL + LW, RL + 3 * LW])
-    for (let y = -100 + (roadOff % 100); y < H; y += 100) ctx.fillRect(lx - 2, y, 4, 55);
+  for (const lx2 of [RL + LW, RL + 3 * LW])
+    for (let y = -100 + (roadOff % 100); y < H; y += 100) ctx.fillRect(lx2 - 2, y, 4, 55);
   const g = ctx.createLinearGradient(0, 0, 0, 260);
   g.addColorStop(0, 'rgba(0,0,0,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, 260);
@@ -375,11 +395,17 @@ function drawScenery(s) {
     ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(x + 4, y + 5, 12 * k, 0, 6.283); ctx.fill();
     ctx.fillStyle = '#2a7d36'; ctx.beginPath(); ctx.arc(x, y, 12 * k, 0, 6.283); ctx.fill();
     ctx.fillStyle = '#e84393'; ctx.beginPath(); ctx.arc(x - 3, y - 3, 3, 0, 6.283); ctx.arc(x + 4, y + 2, 3, 0, 6.283); ctx.fill();
-  } else {
+  } else if (s.type === 2) {
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(x - 14, y - 6, 34, 22);
     ctx.fillStyle = '#6b4a2b'; ctx.fillRect(x - 2, y + 4, 4, 14);
     ctx.fillStyle = '#1f6feb'; rr(x - 17, y - 11, 34, 22, 3); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center'; ctx.fillText('DEG', x, y + 4);
+  } else {
+    const hx = x - s.side * 18;                       // lamp arm reaches toward the road
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(Math.min(x, hx) + 3, y, 18, 5);
+    ctx.fillStyle = '#666'; ctx.fillRect(Math.min(x, hx), y - 2, 18, 4);
+    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.283); ctx.fill();
+    ctx.fillStyle = nightNow > 0.2 ? '#fff0b0' : '#bbb'; ctx.beginPath(); ctx.arc(hx, y, 6, 0, 6.283); ctx.fill();
   }
 }
 function drawToy(it) {
@@ -461,6 +487,59 @@ function drawCar(x, y, w, h, col, st, rot, flip, beam, brk) {
   ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
   ctx.restore();
 }
+
+/* night lighting: dark mask with holes cut for every light source */
+function drawLighting() {
+  const n = nightAmt(), s = sunS();
+  const dusk = Math.max(0, 1 - Math.abs(s) / 0.4);
+  if (dusk > 0.02) { ctx.fillStyle = 'rgba(255,110,30,' + (dusk * 0.2) + ')'; ctx.fillRect(0, 0, W, H); }
+  const a = n * 0.7 + 0.1 * rain;
+  if (a < 0.02) return;
+  const cut = (x, y, r, al) => {
+    const g = lx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(0,0,0,' + al + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    lx.fillStyle = g; lx.beginPath(); lx.arc(x, y, r, 0, 6.283); lx.fill();
+  };
+  lx.globalCompositeOperation = 'source-over';
+  lx.clearRect(0, 0, W, H);
+  lx.fillStyle = 'rgba(4,8,30,' + a + ')'; lx.fillRect(0, 0, W, H);
+  lx.globalCompositeOperation = 'destination-out';
+  if (!stalled && state !== 'crashed') {
+    const g = lx.createLinearGradient(0, PY - 40, 0, PY - 330);
+    g.addColorStop(0, 'rgba(0,0,0,.95)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    lx.fillStyle = g; lx.beginPath();
+    lx.moveTo(player.x - 14, PY - 40); lx.lineTo(player.x - 75, PY - 330);
+    lx.lineTo(player.x + 75, PY - 330); lx.lineTo(player.x + 14, PY - 40); lx.fill();
+  }
+  cut(player.x, PY, 85, 0.75);
+  for (const e of enemies) {
+    cut(e.x, e.y, 72, 0.75);
+    const onc = e.lane < 2 && !e.tg;
+    cut(e.x, e.y + (onc ? 1 : -1) * (e.h / 2 + 40), 55, 0.6);
+  }
+  for (const it of items) cut(it.x, it.y, 38, 0.6);
+  for (const sc of scenery) if (sc.type === 3) cut(sc.x - sc.side * 18, sc.y, 125, 0.9);
+  lx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(lc, 0, 0);
+
+  /* additive glows on top of the darkness */
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const sc of scenery) if (sc.type === 3) glow(sc.x - sc.side * 18, sc.y, 110, 'rgba(255,205,120,' + (0.32 * n) + ')');
+  if (!stalled && state !== 'crashed') {
+    const g = ctx.createLinearGradient(0, PY - 40, 0, PY - 330);
+    g.addColorStop(0, 'rgba(255,240,170,' + (0.22 * n) + ')'); g.addColorStop(1, 'rgba(255,240,170,0)');
+    ctx.fillStyle = g; ctx.beginPath();
+    ctx.moveTo(player.x - 14, PY - 40); ctx.lineTo(player.x - 75, PY - 330);
+    ctx.lineTo(player.x + 75, PY - 330); ctx.lineTo(player.x + 14, PY - 40); ctx.fill();
+  }
+  if (braking || stalled) { glow(player.x - 12, PY + PH / 2, 30, 'rgba(255,30,30,.7)'); glow(player.x + 12, PY + PH / 2, 30, 'rgba(255,30,30,.7)'); }
+  for (const e of enemies) {
+    const onc = e.lane < 2 && !e.tg;
+    glow(e.x, e.y + e.h / 2, 30, onc ? 'rgba(255,250,200,' + (0.5 * n) + ')' : 'rgba(255,40,40,' + (0.5 * n) + ')');
+    glow(e.x, e.y - e.h / 2, 30, onc ? 'rgba(255,40,40,' + (0.5 * n) + ')' : 'rgba(255,250,200,' + (0.5 * n) + ')');
+  }
+  ctx.restore();
+}
 function drawHud() {
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(12, 46, 130, 12); ctx.fillRect(12, 62, 130, 12);
@@ -474,6 +553,31 @@ function drawHud() {
   ctx.fillText('DIST: ' + dist.toFixed(2) + ' km', 12, 108);
   if (rain > 0.3) { ctx.fillStyle = '#9fc4ff'; ctx.fillText('RAIN - SLIPPERY', 12, 124); }
   if (combo > 1) { ctx.font = 'italic bold 22px Arial'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffd400'; ctx.fillText('COMBO x' + combo, W - 12, 60); }
+
+  /* day / night panel */
+  const n = nightAmt(), s = sunS(), tod = ((t + 12) % CYC) / CYC;
+  const label = n > 0.6 ? 'NIGHT' : ((n > 0.05 || Math.abs(s) < 0.25) ? (tod < 0.75 ? 'DUSK' : 'DAWN') : 'DAY');
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; rr(W - 100, 70, 88, 34, 8); ctx.fill();
+  const ix = W - 80, iy = 87;
+  if (n < 0.5) {
+    ctx.fillStyle = '#ffd400'; ctx.strokeStyle = '#ffd400'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ix, iy, 7, 0, 6.283); ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const an = i * Math.PI / 4;
+      ctx.moveTo(ix + Math.cos(an) * 10, iy + Math.sin(an) * 10); ctx.lineTo(ix + Math.cos(an) * 14, iy + Math.sin(an) * 14);
+    }
+    ctx.stroke();
+  } else {
+    ctx.save(); ctx.beginPath(); ctx.arc(ix, iy, 9, 0, 6.283); ctx.clip();
+    ctx.fillStyle = '#e8eeff'; ctx.fillRect(ix - 10, iy - 10, 20, 20);
+    ctx.fillStyle = '#1b2140'; ctx.beginPath(); ctx.arc(ix + 5, iy - 3, 8, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
+  ctx.font = 'bold 14px Arial'; ctx.textAlign = 'left';
+  ctx.fillStyle = n > 0.6 ? '#9fb4ff' : (label === 'DAY' ? '#ffd400' : '#ff9a4d');
+  ctx.fillText(label, W - 62, 92);
+
   if (fuel < 25 && !stalled && (performance.now() % 600) < 400) {
     ctx.font = 'italic 900 22px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff4040'; ctx.fillText('LOW FUEL!', W / 2, 150);
   }
@@ -481,6 +585,8 @@ function drawHud() {
   ctx.textAlign = 'left';
 }
 function draw() {
+  nightNow = nightAmt();
+  const lights = nightNow > 0.2 || rain > 0.3;
   ctx.save();
   if (shake > 0) { const m = shake * 14; ctx.translate(rnd(-m, m), rnd(-m, m)); }
   drawRoad();
@@ -488,22 +594,12 @@ function draw() {
   for (const s of skids) ctx.fillRect(s.x - 2, s.y, 4, 9);
   scenery.forEach(drawScenery);
   items.forEach(drawItem);
-  const dk = dark(), lights = dk > 0.15 || rain > 0.3;
-  const ov = dk + 0.12 * rain;
-  if (ov > 0) { ctx.fillStyle = 'rgba(4,8,28,' + ov + ')'; ctx.fillRect(0, 0, W, H); }
   for (const e of enemies) {
     drawCar(e.x, e.y, e.w, e.h, e.col, e.st, 0, e.lane < 2 && !e.tg, lights, false);
     if (e.sw === 2 && (performance.now() % 300) < 150) {
       const sd = e.tl > e.lane ? 1 : -1;
       ctx.fillStyle = '#ffa500';
       for (const yy of [-e.h / 2 + 4, e.h / 2 - 4]) { ctx.beginPath(); ctx.arc(e.x + sd * (e.w / 2 + 2), e.y + yy, 5, 0, 6.283); ctx.fill(); }
-    }
-  }
-  for (const w of warns) {
-    if ((performance.now() % 300) < 170) {
-      const x = laneX(w.lane);
-      ctx.fillStyle = '#ff2030'; ctx.beginPath(); ctx.moveTo(x, H - 62); ctx.lineTo(x - 20, H - 24); ctx.lineTo(x + 20, H - 24); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.fillText('!', x, H - 30);
     }
   }
   if (boosting) {
@@ -516,6 +612,14 @@ function draw() {
   const bob = state === 'menu' ? Math.sin(performance.now() / 200) * 1.5 : 0;
   drawCar(player.x, PY + bob, PW, PH, '#ff2d55', 1, player.rot, false, !stalled, braking || stalled);
   drawParts();
+  drawLighting();
+  for (const w of warns) {
+    if ((performance.now() % 300) < 170) {
+      const x = laneX(w.lane);
+      ctx.fillStyle = '#ff2030'; ctx.beginPath(); ctx.moveTo(x, H - 62); ctx.lineTo(x - 20, H - 24); ctx.lineTo(x + 20, H - 24); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.fillText('!', x, H - 30);
+    }
+  }
   if (rain > 0.05) {
     ctx.strokeStyle = 'rgba(200,220,255,' + (0.45 * rain) + ')'; ctx.lineWidth = 1.5; ctx.beginPath();
     for (let i = 0, n = Math.floor(110 * rain); i < n; i++) { const x = Math.random() * (W + 20), y = Math.random() * H; ctx.moveTo(x, y); ctx.lineTo(x - 4, y + 18); }

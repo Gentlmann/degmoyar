@@ -25,11 +25,15 @@ canvas{display:block;width:100%;height:100%}
   40%{transform:scale(1.12) rotate(-2deg)}
   100%{transform:scale(1) rotate(-2deg);opacity:1}}
 
-#touch{position:absolute;left:.7em;right:.7em;bottom:.7em;display:flex;gap:.7em}
-#touch button{flex:1;height:3.6em;font:800 1.1em 'Trebuchet MS',Arial,sans-serif;color:#fff;
+#touch{position:absolute;left:.6em;right:.6em;bottom:.6em;display:flex;gap:.5em}
+#touch button{flex:1;height:3.4em;font:800 .95em 'Trebuchet MS',Arial,sans-serif;color:#fff;
   background:rgba(255,255,255,.14);border:.12em solid rgba(255,255,255,.4);border-radius:1em;
-  backdrop-filter:blur(3px);touch-action:none}
+  backdrop-filter:blur(3px);touch-action:none;padding:0}
 #touch button.down{background:rgba(255,212,0,.5);transform:scale(.96)}
+#touch #btnB{color:#ffd400;border-color:rgba(255,212,0,.6)}
+#touch #btnB.down{background:rgba(255,120,0,.6)}
+#touch #btnK{color:#ff6b6b;border-color:rgba(255,80,80,.65)}
+#touch #btnK.down{background:rgba(255,40,40,.6);color:#fff}
 
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:.7em;text-align:center;padding:1em;transition:opacity .4s,visibility .4s;
@@ -56,5 +60,3 @@ kbd{display:inline-block;padding:.1em .5em;border:.1em solid #888;border-bottom-
 #over h3{font-size:1.9em;font-weight:900;letter-spacing:.15em;margin-bottom:.3em}
 .res{font-size:1.3em;font-weight:800}
 .res b{color:#ffd400;font-variant-numeric:tabular-nums}
-#touch #btnB{flex:.8;color:#ffd400;border-color:rgba(255,212,0,.6)}
-#touch #btnB.down{background:rgba(255,120,0,.6)}

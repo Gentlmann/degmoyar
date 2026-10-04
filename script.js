@@ -18,6 +18,7 @@ let shake = 0, crashT = 0, reason = '', overTimer = 0;
 let nitro = 100, boosting = false, wasB = false, bm = 1, slip = 0, combo = 0, comboT = 0;
 let fuel = 100, stalled = false, dist = 0, toys = 0, rain = 0, idleT = 0, wasK = false, lowT = 0, braking = false;
 let isNight = false, nightNow = 0;
+let cats = [], catT = 12;
 let player, enemies = [], parts = [], scenery = [], items = [], pops = [], skids = [], warns = [];
 const keys = { l: false, r: false, b: false, k: false };
 try { best = parseInt(localStorage.getItem('degmoyar_best')) || 0; } catch (e) {}
@@ -112,6 +113,7 @@ function reset() {
   nitro = 100; boosting = false; wasB = false; bm = 1; slip = 0; combo = 0; comboT = 0;
   fuel = 100; stalled = false; dist = 0; toys = 0; rain = 0; idleT = 0; wasK = false; lowT = 0; braking = false;
   isNight = false;
+  cats = []; catT = rnd(8, 12);
   initScenery();
 }
 function addEnemy(lane, kind) {
@@ -323,8 +325,29 @@ function update(dt) {
   pops = pops.filter(p => p.life < 1.2);
   moveScenery(dt);
 
+  /* cats crossing */
+  catT -= dt;
+  if (catT <= 0 && t > 6) {
+    catT = rnd(7, 13);
+    const cd = Math.random() < 0.5 ? 1 : -1;
+    cats.push({ x: cd > 0 ? RL - 24 : RR + 24, y: -40, dir: cd, face: cd, sp: rnd(190, 240) + roadSpeed * 0.1, passed: false,
+      col: ['#f39c12', '#7f8c8d', '#ecf0f1', '#2c2c2c'][Math.floor(Math.random() * 4)] });
+    pop(W / 2, 190, 'CAT CROSSING!');
+    tone(700, 1100, 0.15, 'sine', 0.12); tone(1100, 600, 0.25, 'sine', 0.12, 0.15);
+  }
+  for (const c of cats) {
+    c.y += roadSpeed * dt; c.x += c.dir * c.sp * dt;
+    if ((c.dir > 0 && c.x > RR + 24) || (c.dir < 0 && c.x < RL - 24)) c.dir = 0;   // made it across, sits on the grass
+    if (!c.passed && c.y > PY + 50) {
+      c.passed = true;
+      if (Math.abs(c.x - player.x) < 80) { score += 100; pop(player.x, PY - 90, 'CAT SAVED +100'); tone(900, 1500, 0.15, 'triangle', 0.12); }
+    }
+  }
+  cats = cats.filter(c => c.y < H + 60);
+
   /* collisions */
   if (player.x - PW / 2 < RL || player.x + PW / 2 > RR) { crash('YOU LEFT THE ROAD!'); return; }
+  for (const c of cats) if (Math.abs(c.x - player.x) < PW / 2 + 12 && Math.abs(c.y - PY) < PH / 2 + 8) { crash('YOU HIT THE CAT!'); return; }
   for (const e of enemies) {
     if (Math.abs(e.x - player.x) < (e.w + PW) / 2 - 4 && Math.abs(e.y - PY) < (e.h + PH) / 2 - 4) { crash('CRASH!'); return; }
     const gone = e.tg ? e.y + e.h / 2 < PY - PH / 2 : e.y - e.h / 2 > PY + PH / 2;
@@ -407,6 +430,22 @@ function drawScenery(s) {
     ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.283); ctx.fill();
     ctx.fillStyle = nightNow > 0.2 ? '#fff0b0' : '#bbb'; ctx.beginPath(); ctx.arc(hx, y, 6, 0, 6.283); ctx.fill();
   }
+}
+function drawCat(c) {
+  const ph = c.dir ? performance.now() / 60 : 0, s = Math.sin(ph) * 5;
+  ctx.save(); ctx.translate(c.x, c.y); ctx.scale(c.face, 1);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(3, 6, 17, 8, 0, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = c.col; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-14, 0); ctx.quadraticCurveTo(-24, Math.sin(ph * 0.5) * 9, -28, -10); ctx.stroke();
+  ctx.fillStyle = c.col;
+  ctx.fillRect(-10 + s, -10, 6, 3); ctx.fillRect(-10 - s, 7, 6, 3); ctx.fillRect(7 - s, -10, 6, 3); ctx.fillRect(7 + s, 7, 6, 3);
+  ctx.beginPath(); ctx.ellipse(0, 0, 15, 8, 0, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.arc(16, 0, 7, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(13, -4); ctx.lineTo(14, -11); ctx.lineTo(18, -6); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(13, 4); ctx.lineTo(14, 11); ctx.lineTo(18, 6); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(-6, -7, 2, 14); ctx.fillRect(0, -7, 2, 14);
+  ctx.fillStyle = '#9cff6a'; ctx.fillRect(18, -4, 2, 2); ctx.fillRect(18, 2, 2, 2);
+  ctx.restore();
 }
 function drawToy(it) {
   const x = it.x, y = it.y + Math.sin(performance.now() / 150) * 3;
@@ -518,6 +557,7 @@ function drawLighting() {
     cut(e.x, e.y + (onc ? 1 : -1) * (e.h / 2 + 40), 55, 0.6);
   }
   for (const it of items) cut(it.x, it.y, 38, 0.6);
+  for (const c of cats) cut(c.x, c.y, 45, 0.7);
   for (const sc of scenery) if (sc.type === 3) cut(sc.x - sc.side * 18, sc.y, 125, 0.9);
   lx.globalCompositeOperation = 'source-over';
   ctx.drawImage(lc, 0, 0);
@@ -538,6 +578,7 @@ function drawLighting() {
     glow(e.x, e.y + e.h / 2, 30, onc ? 'rgba(255,250,200,' + (0.5 * n) + ')' : 'rgba(255,40,40,' + (0.5 * n) + ')');
     glow(e.x, e.y - e.h / 2, 30, onc ? 'rgba(255,40,40,' + (0.5 * n) + ')' : 'rgba(255,250,200,' + (0.5 * n) + ')');
   }
+  for (const c of cats) glow(c.x + c.face * 18, c.y, 14, 'rgba(120,255,120,' + (0.6 * n + 0.2) + ')');
   ctx.restore();
 }
 function drawHud() {
@@ -594,6 +635,7 @@ function draw() {
   for (const s of skids) ctx.fillRect(s.x - 2, s.y, 4, 9);
   scenery.forEach(drawScenery);
   items.forEach(drawItem);
+  cats.forEach(drawCat);
   for (const e of enemies) {
     drawCar(e.x, e.y, e.w, e.h, e.col, e.st, 0, e.lane < 2 && !e.tg, lights, false);
     if (e.sw === 2 && (performance.now() % 300) < 150) {
